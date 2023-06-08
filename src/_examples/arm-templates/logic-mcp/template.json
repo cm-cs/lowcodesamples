@@ -1,0 +1,1178 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "MCPWorkflowName": {
+            "defaultValue": "logic-example-mcp-uks",
+            "type": "String"
+        },
+        "MCPManagedIdentityReference": {
+            "defaultValue": "[concat(resourceGroup().id,'/providers/Microsoft.ManagedIdentity/userAssignedIdentities/mi-mcp-uks')]",
+            "type": "String"
+        },
+        "SQLConnectionReference": {
+            "defaultValue": "[concat(resourceGroup().id,'/providers/Microsoft.Web/connections/sql')]",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('MCPWorkflowName')]",
+            "location": "uksouth",
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[parameters('MCPManagedIdentityReference')]": {}
+                }
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },
+                        "jobCompletionState": {
+                            "defaultValue": 5,
+                            "type": "Int"
+                        },
+                        "jobTypes": {
+                            "defaultValue": [
+                                "aaduser_add",
+                                "aaduser_update",
+                                "aaduser_guestinvite"
+                            ],
+                            "type": "Array"
+                        },
+                        "managedIdentityReferenceId": {
+                            "defaultValue": "[parameters('MCPManagedIdentityReference')]",
+                            "type": "String"
+                        },
+                        "notificationTargets": {
+                            "defaultValue": {
+                                "email": "https://",
+                                "slack": "https://"
+                            },
+                            "type": "Object"
+                        },
+                        "sqlServerDatabase": {
+                            "defaultValue": "",
+                            "type": "String"
+                        },
+                        "sqlServerName": {
+                            "defaultValue": "",
+                            "type": "String"
+                        },
+                        "sqlServerTable": {
+                            "defaultValue": "",
+                            "type": "String"
+                        }
+                    },
+                    "staticResults": {
+                        "HTTP_-_WF_-_Handle_User_Invitation0": {
+                            "status": "Succeeded",
+                            "outputs": {
+                                "headers": {},
+                                "statusCode": "OK"
+                            }
+                        },
+                        "HTTP_-_WF_-_Handle_generic_notification0": {
+                            "status": "Succeeded",
+                            "outputs": {
+                                "headers": {},
+                                "statusCode": "OK"
+                            }
+                        },
+                        "HTTP_-_WF_-_Slack_Notification1": {
+                            "status": "Succeeded",
+                            "outputs": {
+                                "headers": {},
+                                "statusCode": "OK"
+                            }
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Minute",
+                                "interval": 5,
+                                "startTime": "2023-12-21T16:00:00Z"
+                            },
+                            "evaluatedRecurrence": {
+                                "frequency": "Minute",
+                                "interval": 5,
+                                "startTime": "2023-12-21T16:00:00Z"
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Compose_MI": {
+                            "runAfter": {
+                                "Initialize_variable_-_JobsPending": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Compose",
+                            "inputs": {
+                                "audience": "https://graph.microsoft.com",
+                                "identity": "@{parameters('managedIdentityReferenceId')}",
+                                "type": "ManagedServiceIdentity"
+                            }
+                        },
+                        "Initialize_variable_-_JobSuccess": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "JobSuccess",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_variable_-_JobsPending": {
+                            "runAfter": {
+                                "Initialize_variable_-_JobSuccess": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "JobsPending",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Loop_until_JobsPending_is_empty": {
+                            "actions": {
+                                "Scope_-_handle_aaduser_inviteguest": {
+                                    "actions": {
+                                        "Filter_array_for_aaduser_inviteguest_actions": {
+                                            "runAfter": {},
+                                            "type": "Query",
+                                            "inputs": {
+                                                "from": "@body('Filter_before_processing')",
+                                                "where": "@and(\nequals(item()?['requestType'], 'aaduser_guestinvite'),\ncontains(variables('JobsPending'), item()?['id'])\n)"
+                                            }
+                                        },
+                                        "For_each_aaduser_inviteguest_action": {
+                                            "foreach": "@body('Filter_array_for_aaduser_inviteguest_actions')",
+                                            "actions": {
+                                                "Compose_aaduser_inviteguest_item_reference": {
+                                                    "runAfter": {},
+                                                    "type": "Compose",
+                                                    "inputs": "@item()?['id']"
+                                                },
+                                                "Compose_invitee_upn": {
+                                                    "runAfter": {
+                                                        "Compose_aaduser_inviteguest_item_reference": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Compose",
+                                                    "inputs": "@item()?['objectReference']"
+                                                },
+                                                "Filter_this_item_out_of_JobsPending": {
+                                                    "runAfter": {
+                                                        "HTTP_-_WF_-_Handle_User_Invitation": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Query",
+                                                    "inputs": {
+                                                        "from": "@variables('JobsPending')",
+                                                        "where": "@not(contains(item(), outputs('Compose_aaduser_inviteguest_item_reference')))"
+                                                    }
+                                                },
+                                                "HTTP_-_WF_-_Handle_User_Invitation": {
+                                                    "runAfter": {
+                                                        "Compose_invitee_upn": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "method": "POST",
+                                                        "uri": "https://destination"
+                                                    },
+                                                    "runtimeConfiguration": {
+                                                        "staticResult": {
+                                                            "staticResultOptions": "Enabled",
+                                                            "name": "HTTP_-_WF_-_Handle_User_Invitation0"
+                                                        }
+                                                    }
+                                                },
+                                                "Set_variable_-_update_JobsPending_removing_this_aaduser_guestinvite": {
+                                                    "runAfter": {
+                                                        "Filter_this_item_out_of_JobsPending": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "JobsPending",
+                                                        "value": "@body('Filter_this_item_out_of_JobsPending')"
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Filter_array_for_aaduser_inviteguest_actions": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Tracking": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Scope_-_handle_aaduser_update": {
+                                    "actions": {
+                                        "Filter_array_for_aaduser_update_actions": {
+                                            "runAfter": {},
+                                            "type": "Query",
+                                            "inputs": {
+                                                "from": "@body('Filter_before_processing')",
+                                                "where": "@and(\nequals(item()?['requestType'], 'aaduser_aaduserupdate'),\ncontains(variables('JobsPending'), item()?['id']),\nnot(contains(variables('JobSuccess'), item()?['id']))\n)"
+                                            }
+                                        },
+                                        "For_each_aaduser_update_action": {
+                                            "foreach": "@body('Filter_out_jobs_which_are_complete')",
+                                            "actions": {
+                                                "Compose_job_record_ID": {
+                                                    "runAfter": {
+                                                        "Parse_JSON_-_job_record_-_aaduser_update": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Compose",
+                                                    "inputs": "@body('Parse_JSON_-_job_record_-_aaduser_update')?['id']"
+                                                },
+                                                "HTTP_-_Graph_API_-_Get_User": {
+                                                    "runAfter": {
+                                                        "Compose_job_record_ID": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "authentication": "@outputs('Compose_MI')",
+                                                        "method": "GET",
+                                                        "uri": "https://graph.microsoft.com/v1.0/users/@{items('For_each_aaduser_update_action')['objectReference']}?$select=id,displayName,mail,jobTitle,givenName,surname,officeLocation,userPrincipalName,department"
+                                                    }
+                                                },
+                                                "Parse_JSON_-_job_record_-_aaduser_update": {
+                                                    "runAfter": {},
+                                                    "type": "ParseJson",
+                                                    "inputs": {
+                                                        "content": "@items('For_each_aaduser_update_action')",
+                                                        "schema": {
+                                                            "properties": {
+                                                                "@@odata.etag": {
+                                                                    "type": "string"
+                                                                },
+                                                                "ItemInternalId": {
+                                                                    "type": "string"
+                                                                },
+                                                                "attributeChange": {
+                                                                    "type": "string"
+                                                                },
+                                                                "attributeValue": {
+                                                                    "type": "string"
+                                                                },
+                                                                "complete": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "objectReference": {
+                                                                    "type": "string"
+                                                                },
+                                                                "objectType": {
+                                                                    "type": "string"
+                                                                },
+                                                                "requestReference": {
+                                                                    "type": "string"
+                                                                },
+                                                                "requestType": {
+                                                                    "type": "string"
+                                                                },
+                                                                "status": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "timeGenerated": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        }
+                                                    }
+                                                },
+                                                "Switch_on_status": {
+                                                    "runAfter": {
+                                                        "HTTP_-_Graph_API_-_Get_User": [
+                                                            "Succeeded",
+                                                            "Failed",
+                                                            "TimedOut"
+                                                        ]
+                                                    },
+                                                    "cases": {
+                                                        "Case_-_0_-_New_job_to_be_processed": {
+                                                            "case": 0,
+                                                            "actions": {
+                                                                "Condition_-_User_valid": {
+                                                                    "actions": {
+                                                                        "Condition_-_User_updated_successfully": {
+                                                                            "actions": {
+                                                                                "Append_to_JobSuccess_-_stage_0_successful": {
+                                                                                    "runAfter": {},
+                                                                                    "type": "AppendToArrayVariable",
+                                                                                    "inputs": {
+                                                                                        "name": "JobSuccess",
+                                                                                        "value": "@outputs('Compose_job_record_ID')"
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "runAfter": {
+                                                                                "HTTP_-_Graph_API_-_Update_User": [
+                                                                                    "Succeeded"
+                                                                                ]
+                                                                            },
+                                                                            "expression": {
+                                                                                "or": [
+                                                                                    {
+                                                                                        "equals": [
+                                                                                            "@outputs('HTTP_-_Graph_API_-_Update_User')['statusCode']",
+                                                                                            200
+                                                                                        ]
+                                                                                    },
+                                                                                    {
+                                                                                        "equals": [
+                                                                                            "@outputs('HTTP_-_Graph_API_-_Update_User')['statusCode']",
+                                                                                            202
+                                                                                        ]
+                                                                                    },
+                                                                                    {
+                                                                                        "equals": [
+                                                                                            "@outputs('HTTP_-_Graph_API_-_Update_User')['statusCode']",
+                                                                                            204
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            "type": "If"
+                                                                        },
+                                                                        "HTTP_-_Graph_API_-_Update_User": {
+                                                                            "runAfter": {},
+                                                                            "type": "Http",
+                                                                            "inputs": {
+                                                                                "authentication": "@outputs('Compose_MI')",
+                                                                                "body": {
+                                                                                    "@items('For_each_aaduser_update_action')['attributeChange']": "@items('For_each_aaduser_update_action')['AttributeValue']"
+                                                                                },
+                                                                                "method": "PATCH",
+                                                                                "uri": "https://graph.microsoft.com/v1.0/users/@{items('For_each_aaduser_update_action')['objectReference']}"
+                                                                            },
+                                                                            "description": "To demonstrate: Wrapping some guards around attributeChange"
+                                                                        }
+                                                                    },
+                                                                    "runAfter": {},
+                                                                    "expression": {
+                                                                        "and": [
+                                                                            {
+                                                                                "equals": [
+                                                                                    "@outputs('HTTP_-_Graph_API_-_Get_User')['statusCode']",
+                                                                                    200
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                    "type": "If"
+                                                                },
+                                                                "Condition_-_job_processed_successfully": {
+                                                                    "actions": {},
+                                                                    "runAfter": {
+                                                                        "Condition_-_User_valid": [
+                                                                            "Succeeded"
+                                                                        ]
+                                                                    },
+                                                                    "expression": {
+                                                                        "and": [
+                                                                            {
+                                                                                "contains": [
+                                                                                    "@variables('JobSuccess')",
+                                                                                    ""
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                    "type": "If"
+                                                                }
+                                                            }
+                                                        },
+                                                        "Case_-_1_-_Job_requires_approval": {
+                                                            "case": 1,
+                                                            "actions": {}
+                                                        },
+                                                        "Case_-_2_-_Job_approved,_awaiting_action_to_be_performed": {
+                                                            "case": 2,
+                                                            "actions": {}
+                                                        },
+                                                        "Case_-_3_-_Job_action_performed,_awaiting_validation": {
+                                                            "case": 3,
+                                                            "actions": {
+                                                                "Condition_-_user_validation_check": {
+                                                                    "actions": {
+                                                                        "Compose_user_object_as_array": {
+                                                                            "runAfter": {
+                                                                                "Parse_JSON_-_user_object": [
+                                                                                    "Succeeded"
+                                                                                ]
+                                                                            },
+                                                                            "type": "Compose",
+                                                                            "inputs": [
+                                                                                "@body('Parse_JSON_-_user_object')"
+                                                                            ]
+                                                                        },
+                                                                        "Condition_-_user_change_validated": {
+                                                                            "actions": {},
+                                                                            "runAfter": {
+                                                                                "Filter_array_-_validate_attribute_change": [
+                                                                                    "Succeeded"
+                                                                                ]
+                                                                            },
+                                                                            "expression": {
+                                                                                "and": [
+                                                                                    {
+                                                                                        "greater": [
+                                                                                            "@length(body('Filter_array_-_validate_attribute_change'))",
+                                                                                            0
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            "type": "If"
+                                                                        },
+                                                                        "Filter_array_-_validate_attribute_change": {
+                                                                            "runAfter": {
+                                                                                "Parse_JSON_faux_user_array": [
+                                                                                    "Succeeded"
+                                                                                ]
+                                                                            },
+                                                                            "type": "Query",
+                                                                            "inputs": {
+                                                                                "from": "@body('Parse_JSON_faux_user_array')",
+                                                                                "where": "@equals(item()[body('Parse_JSON_-_job_record_-_aaduser_update')?['attributeChange']], body('Parse_JSON_-_job_record_-_aaduser_update')?['attributeValue'])"
+                                                                            }
+                                                                        },
+                                                                        "Parse_JSON_-_user_object": {
+                                                                            "runAfter": {},
+                                                                            "type": "ParseJson",
+                                                                            "inputs": {
+                                                                                "content": "@body('HTTP_-_Graph_API_-_Get_User')",
+                                                                                "schema": {
+                                                                                    "properties": {
+                                                                                        "@@odata.context": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "department": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "displayName": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "givenName": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "id": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "jobTitle": {},
+                                                                                        "mail": {},
+                                                                                        "officeLocation": {},
+                                                                                        "surname": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "userPrincipalName": {
+                                                                                            "type": "string"
+                                                                                        }
+                                                                                    },
+                                                                                    "type": "object"
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        "Parse_JSON_faux_user_array": {
+                                                                            "runAfter": {
+                                                                                "Compose_user_object_as_array": [
+                                                                                    "Succeeded"
+                                                                                ]
+                                                                            },
+                                                                            "type": "ParseJson",
+                                                                            "inputs": {
+                                                                                "content": "@outputs('Compose_user_object_as_array')",
+                                                                                "schema": {
+                                                                                    "items": {
+                                                                                        "properties": {
+                                                                                            "@@odata.context": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "department": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "displayName": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "givenName": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "id": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "jobTitle": {},
+                                                                                            "mail": {},
+                                                                                            "officeLocation": {},
+                                                                                            "surname": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "userPrincipalName": {
+                                                                                                "type": "string"
+                                                                                            }
+                                                                                        },
+                                                                                        "required": [
+                                                                                            "@@odata.context",
+                                                                                            "id",
+                                                                                            "displayName",
+                                                                                            "mail",
+                                                                                            "jobTitle",
+                                                                                            "givenName",
+                                                                                            "surname",
+                                                                                            "officeLocation",
+                                                                                            "userPrincipalName",
+                                                                                            "department"
+                                                                                        ],
+                                                                                        "type": "object"
+                                                                                    },
+                                                                                    "type": "array"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "runAfter": {},
+                                                                    "expression": {
+                                                                        "and": [
+                                                                            {
+                                                                                "equals": [
+                                                                                    "@outputs('HTTP_-_Graph_API_-_Get_User')['statusCode']",
+                                                                                    200
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                    "type": "If"
+                                                                }
+                                                            }
+                                                        },
+                                                        "Case_-_4_-_Errors_were_found": {
+                                                            "case": 4,
+                                                            "actions": {}
+                                                        },
+                                                        "Case_-_5-_Job_completed": {
+                                                            "case": 5,
+                                                            "actions": {}
+                                                        }
+                                                    },
+                                                    "default": {
+                                                        "actions": {}
+                                                    },
+                                                    "expression": "@body('Parse_JSON_-_job_record_-_aaduser_update')?['status']",
+                                                    "type": "Switch",
+                                                    "description": "To discuss: switching versus filtering; demonstrate converting"
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Filter_array_for_aaduser_update_actions": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach",
+                                            "description": "To discuss: When it is appropriate to re-parse",
+                                            "runtimeConfiguration": {
+                                                "concurrency": {
+                                                    "repetitions": 1
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Scope_-_handle_aaduser_inviteguest": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Scope_-_handle_generic_approval_needed": {
+                                    "actions": {},
+                                    "runAfter": {
+                                        "Tracking": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope",
+                                    "description": "To demonstrate: Building the filter for this state"
+                                },
+                                "Scope_-_handle_generic_notification": {
+                                    "actions": {
+                                        "Filter_array_for_jobs_requiring_notification": {
+                                            "runAfter": {},
+                                            "type": "Query",
+                                            "inputs": {
+                                                "from": "@body('Filter_before_processing')",
+                                                "where": "@equals(item()?['status'], 1)"
+                                            },
+                                            "description": "To demonstrate: Upgrade this to an advanced filter"
+                                        },
+                                        "For_each_job_requiring_notification": {
+                                            "foreach": "@body('Filter_array_for_jobs_requiring_notification')",
+                                            "actions": {
+                                                "Compose_generic_notification_message": {
+                                                    "runAfter": {},
+                                                    "type": "Compose",
+                                                    "inputs": {
+                                                        "messageBody": "The request has been updated.",
+                                                        "messageHeader": "Request update",
+                                                        "messageRecipients": [
+                                                            {
+                                                                "recipient": "example",
+                                                                "recipientType": "user"
+                                                            }
+                                                        ],
+                                                        "messageType": "simple"
+                                                    }
+                                                },
+                                                "HTTP_-_WF_-_Handle_generic_notification": {
+                                                    "runAfter": {
+                                                        "Compose_generic_notification_message": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "body": "@outputs('Compose_generic_notification_message')",
+                                                        "method": "POST",
+                                                        "uri": "@{parameters('notificationTargets')?['slack']}"
+                                                    },
+                                                    "runtimeConfiguration": {
+                                                        "staticResult": {
+                                                            "staticResultOptions": "Enabled",
+                                                            "name": "HTTP_-_WF_-_Handle_generic_notification0"
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Filter_array_for_jobs_requiring_notification": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach",
+                                            "description": "To demonstrate: Building an array of recipients from the source data"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Scope_-_handle_generic_approval_needed": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Scope_-_handle_job_completion": {
+                                    "actions": {
+                                        "Filter_array_for_jobs_ready_to_be_completed": {
+                                            "runAfter": {},
+                                            "type": "Query",
+                                            "inputs": {
+                                                "from": "@body('Filter_before_processing')",
+                                                "where": "@greaterOrEquals(item()?['status'], parameters('jobCompletionState'))"
+                                            }
+                                        },
+                                        "For_each_job_ready_to_be_completed": {
+                                            "foreach": "@body('Filter_array_for_jobs_ready_to_be_completed')",
+                                            "actions": {
+                                                "Compose_job_reference_to_mark_as_complete": {
+                                                    "runAfter": {},
+                                                    "type": "Compose",
+                                                    "inputs": "@item()?['id']"
+                                                },
+                                                "Condition_notification_recipients_exist": {
+                                                    "actions": {
+                                                        "Compose_job_completion_message": {
+                                                            "runAfter": {
+                                                                "Select_job_completion_notification_recipients": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "Compose",
+                                                            "inputs": {
+                                                                "messageBody": "The request has been completed.",
+                                                                "messageHeader": "Request complete",
+                                                                "messageRecipients": "@body('Select_job_completion_notification_recipients')",
+                                                                "messageType": "simple"
+                                                            }
+                                                        },
+                                                        "HTTP_-_WF_-_Slack_completion_notification": {
+                                                            "runAfter": {
+                                                                "Compose_job_completion_message": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "body": "@outputs('Compose_job_completion_message')",
+                                                                "method": "POST",
+                                                                "uri": "@{parameters('notificationTargets')?['slack']}"
+                                                            },
+                                                            "runtimeConfiguration": {
+                                                                "staticResult": {
+                                                                    "staticResultOptions": "Enabled",
+                                                                    "name": "HTTP_-_WF_-_Slack_Notification1"
+                                                                }
+                                                            }
+                                                        },
+                                                        "Select_job_completion_notification_recipients": {
+                                                            "runAfter": {},
+                                                            "type": "Select",
+                                                            "inputs": {
+                                                                "from": "@split(item()?['requestUser'],',')",
+                                                                "select": {
+                                                                    "recipient": "@item()",
+                                                                    "recipientType": "user"
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "Update_job_-_mark_as_complete": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "not": {
+                                                                    "equals": [
+                                                                        "@item()?['requestUser']",
+                                                                        "@null"
+                                                                    ]
+                                                                }
+                                                            },
+                                                            {
+                                                                "greater": [
+                                                                    "@length(item()?['requestUser'])",
+                                                                    0
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "type": "If"
+                                                },
+                                                "Update_job_-_mark_as_complete": {
+                                                    "runAfter": {
+                                                        "Compose_job_reference_to_mark_as_complete": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "body": {
+                                                            "complete": true
+                                                        },
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['sql']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "patch",
+                                                        "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent(parameters('sqlServerName')))},@{encodeURIComponent(encodeURIComponent(parameters('sqlServerDatabase')))}/tables/@{encodeURIComponent(encodeURIComponent(parameters('sqlServerTable')))}/items/@{encodeURIComponent(encodeURIComponent(outputs('Compose_job_reference_to_mark_as_complete')))}"
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Filter_array_for_jobs_ready_to_be_completed": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Scope_-_handle_aaduser_update": [
+                                            "Succeeded"
+                                        ],
+                                        "Scope_-_handle_generic_notification": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Tracking": {
+                                    "runAfter": {},
+                                    "type": "Compose",
+                                    "inputs": "JobsPending length: @{length(variables('JobsPending'))}"
+                                }
+                            },
+                            "runAfter": {
+                                "Scope_-_catch_unknown_activities": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "expression": "@equals(length(variables('JobsPending')), 0)",
+                            "limit": {
+                                "count": 10,
+                                "timeout": "PT1H"
+                            },
+                            "type": "Until"
+                        },
+                        "Scope_-_catch_unknown_activities": {
+                            "actions": {
+                                "Condition_is_valid_job_type": {
+                                    "actions": {
+                                        "Filter_original_list_to_exclude_unknown_job_IDs": {
+                                            "runAfter": {
+                                                "Select_unknown_job_IDs": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Query",
+                                            "inputs": {
+                                                "from": "@body('Filter_out_jobs_which_are_complete')",
+                                                "where": "@not(contains(body('Select_unknown_job_IDs'), item()?['id']))"
+                                            }
+                                        },
+                                        "Select_known_job_IDs": {
+                                            "runAfter": {
+                                                "Filter_original_list_to_exclude_unknown_job_IDs": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Select",
+                                            "inputs": {
+                                                "from": "@body('Filter_original_list_to_exclude_unknown_job_IDs')",
+                                                "select": "@item()?['id']"
+                                            }
+                                        },
+                                        "Select_unknown_job_IDs": {
+                                            "runAfter": {},
+                                            "type": "Select",
+                                            "inputs": {
+                                                "from": "@body('Filter_for_unknown_job_types')",
+                                                "select": "@item()?['id']"
+                                            }
+                                        },
+                                        "Set_variable_JobsPending_to_exclude_unknown_job_types": {
+                                            "runAfter": {
+                                                "Select_known_job_IDs": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable",
+                                            "inputs": {
+                                                "name": "JobsPending",
+                                                "value": "@body('Select_known_job_IDs')"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Filter_for_unknown_job_types": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "greater": [
+                                                    "@length(body('Filter_for_unknown_job_types'))",
+                                                    0
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                },
+                                "Filter_before_processing": {
+                                    "runAfter": {
+                                        "Condition_is_valid_job_type": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Query",
+                                    "inputs": {
+                                        "from": "@body('Filter_out_jobs_which_are_complete')",
+                                        "where": "@contains(variables('JobsPending'), item()?['id'])"
+                                    },
+                                    "description": "This is the last filter performed against the data before going into a loop to process, all subsequent filters can use this output"
+                                },
+                                "Filter_for_unknown_job_types": {
+                                    "runAfter": {},
+                                    "type": "Query",
+                                    "inputs": {
+                                        "from": "@body('Filter_out_jobs_which_are_complete')",
+                                        "where": "@not(contains(parameters('jobTypes'), item()?['requestType']))"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Scope_-_get_job_information": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Scope",
+                            "description": "This is here to catch anything that isn't yet known and handled, and appropriately remove it from the JobsPending list. This could be done in the SQL query, but here for more examples of Filter and Select actions."
+                        },
+                        "Scope_-_get_job_information": {
+                            "actions": {
+                                "Compose_OData_filter_for_known_job_types": {
+                                    "runAfter": {},
+                                    "type": "Compose",
+                                    "inputs": "requestType eq '@{join(parameters('jobTypes'),concat('''',' or requestType eq ',''''))}'"
+                                },
+                                "Compose_OData_filter_for_unknown_job_types": {
+                                    "runAfter": {
+                                        "Compose_OData_filter_for_known_job_types": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Compose",
+                                    "inputs": "not(@{outputs('Compose_OData_filter_for_known_job_types')})"
+                                },
+                                "Condition_unknown_job_types_exist": {
+                                    "actions": {},
+                                    "runAfter": {
+                                        "Get_unknown_job_types": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "greater": [
+                                                    "@length(body('Get_unknown_job_types')?['value'])",
+                                                    0
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If",
+                                    "description": "To demonstrate: How to build up the SQL connector"
+                                },
+                                "Filter_out_jobs_which_are_complete": {
+                                    "runAfter": {
+                                        "Parse_JSON_-_Jobs_array": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Query",
+                                    "inputs": {
+                                        "from": "@body('Parse_JSON_-_Jobs_array')",
+                                        "where": "@not(equals(item()['complete'], 1))"
+                                    },
+                                    "description": "This may be done at the Get rows level instead, but here as an example"
+                                },
+                                "Get_jobs_requiring_work": {
+                                    "runAfter": {
+                                        "Condition_unknown_job_types_exist": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['sql']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent(parameters('sqlServerName')))},@{encodeURIComponent(encodeURIComponent(parameters('sqlServerDatabase')))}/tables/@{encodeURIComponent(encodeURIComponent(parameters('sqlServerTable')))}/items",
+                                        "queries": {
+                                            "$filter": "complete eq 0 and @{outputs('Compose_OData_filter_for_known_job_types')}"
+                                        }
+                                    }
+                                },
+                                "Get_unknown_job_types": {
+                                    "runAfter": {
+                                        "Compose_OData_filter_for_unknown_job_types": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['sql']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent(parameters('sqlServerName')))},@{encodeURIComponent(encodeURIComponent(parameters('sqlServerDatabase')))}/tables/@{encodeURIComponent(encodeURIComponent(parameters('sqlServerTable')))}/items",
+                                        "queries": {
+                                            "$filter": "complete eq 0 and @{outputs('Compose_OData_filter_for_unknown_job_types')}"
+                                        }
+                                    },
+                                    "runtimeConfiguration": {
+                                        "paginationPolicy": {
+                                            "minimumItemCount": 100
+                                        }
+                                    }
+                                },
+                                "Parse_JSON_-_Jobs_array": {
+                                    "runAfter": {
+                                        "Get_jobs_requiring_work": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('Get_jobs_requiring_work')?['value']",
+                                        "schema": {
+                                            "items": {
+                                                "properties": {
+                                                    "@@odata.etag": {
+                                                        "type": "string"
+                                                    },
+                                                    "ItemInternalId": {
+                                                        "type": "string"
+                                                    },
+                                                    "attributeChange": {
+                                                        "type": "string"
+                                                    },
+                                                    "complete": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "notficationType": {
+                                                        "type": "string"
+                                                    },
+                                                    "objectReference": {
+                                                        "type": "string"
+                                                    },
+                                                    "objectType": {
+                                                        "type": "string"
+                                                    },
+                                                    "requestReference": {
+                                                        "type": "string"
+                                                    },
+                                                    "requestType": {
+                                                        "type": "string"
+                                                    },
+                                                    "requestUser": {
+                                                        "type": "string"
+                                                    },
+                                                    "status": {
+                                                        "type": "integer"
+                                                    },
+                                                    "timeGenerated": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "@@odata.etag",
+                                                    "ItemInternalId",
+                                                    "requestReference",
+                                                    "timeGenerated",
+                                                    "status",
+                                                    "complete",
+                                                    "objectType",
+                                                    "objectReference",
+                                                    "attributeChange",
+                                                    "id"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "description": "To demonstrate: Final adjustments for potential null values"
+                                },
+                                "Select_job_references": {
+                                    "runAfter": {
+                                        "Filter_out_jobs_which_are_complete": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Select",
+                                    "inputs": {
+                                        "from": "@body('Filter_out_jobs_which_are_complete')",
+                                        "select": "@item()?['id']"
+                                    }
+                                },
+                                "Set_variable_JobsPending": {
+                                    "runAfter": {
+                                        "Select_job_references": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "JobsPending",
+                                        "value": "@body('Select_job_references')"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Compose_MI": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Scope"
+                        },
+                        "Terminate": {
+                            "runAfter": {
+                                "Loop_until_JobsPending_is_empty": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate",
+                            "inputs": {
+                                "runStatus": "Succeeded"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "sql": {
+                                "connectionId": "[parameters('SQLConnectionReference')]",
+                                "connectionName": "sql",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "identity": "[parameters('MCPManagedIdentityReference')]",
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[concat(subscription().id,'/providers/Microsoft.Web/locations/',resourceGroup().location,'/managedApis/sql')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

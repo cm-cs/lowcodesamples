@@ -32,3 +32,11 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Allow Terraform variable files into repo
+!terraform/environments/*.tfvars
+
+# Ignore local test credentials
+auth.json
+credentials.json
+creds.txt

@@ -1,0 +1,625 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "NotificationResponseWorkflowName": {
+            "defaultValue": "logic-example-slackresponse-uks",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('NotificationResponseWorkflowName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "slackApprovalSearchText": {
+                            "defaultValue": "Approval response",
+                            "type": "String"
+                        },
+                        "slackResponseBrokerUrl": {
+                            "defaultValue": "",
+                            "type": "String"
+                        }
+                    },
+                    "staticResults": {
+                        "HTTP_-_Slack_via_LA_-_Respond_to_message_0": {
+                            "status": "Succeeded",
+                            "outputs": {
+                                "headers": {},
+                                "statusCode": "OK"
+                            }
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "method": "POST",
+                                "schema": {
+                                    "properties": {
+                                        "$content": {
+                                            "type": "string"
+                                        },
+                                        "$content-type": {
+                                            "type": "string"
+                                        },
+                                        "$formdata": {
+                                            "items": {
+                                                "properties": {
+                                                    "key": {
+                                                        "type": "string"
+                                                    },
+                                                    "value": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "key",
+                                                    "value"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_variable_-_responseResult": {
+                            "runAfter": {
+                                "Initialize_variable_-_responseType": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "responseResult",
+                                        "type": "string"
+                                    }
+                                ]
+                            },
+                            "description": "This will house the result of an approval (minus the comments which must be dealt with separately)"
+                        },
+                        "Initialize_variable_-_responseType": {
+                            "runAfter": {
+                                "Response_-_always_200_OK_for_Slack_interaction": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "responseType",
+                                        "type": "string",
+                                        "value": "simple"
+                                    }
+                                ]
+                            }
+                        },
+                        "Response_-_always_200_OK_for_Slack_interaction": {
+                            "runAfter": {},
+                            "type": "Response",
+                            "kind": "Http",
+                            "inputs": {
+                                "statusCode": 200
+                            }
+                        },
+                        "Scope_-_Perform_subsequent_latent_actions": {
+                            "actions": {
+                                "Compose_form_data_array": {
+                                    "runAfter": {},
+                                    "type": "Compose",
+                                    "inputs": "@triggerBody()?['$formData']"
+                                },
+                                "Condition_-_payload_present": {
+                                    "actions": {
+                                        "Compose_payload_data": {
+                                            "runAfter": {},
+                                            "type": "Compose",
+                                            "inputs": "@body('Filter_for_payload')[0]?['value']"
+                                        },
+                                        "Condition_-_response_url_given": {
+                                            "actions": {
+                                                "Compose_combined_messageBody": {
+                                                    "runAfter": {
+                                                        "Condition_-_check_for_approval_response": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Compose",
+                                                    "inputs": "@{outputs('Compose_response_to_messageBody')}@{outputs('Compose_updated_messageBody')}"
+                                                },
+                                                "Compose_response_body": {
+                                                    "runAfter": {
+                                                        "Compose_combined_messageBody": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Compose",
+                                                    "inputs": {
+                                                        "isUpdate": true,
+                                                        "messageBody": "@outputs('Compose_combined_messageBody')",
+                                                        "messageHeader": "@{if(equals(length(body('Filter_blocks_for_message_header')),1),body('Filter_blocks_for_message_header')[0]?['text']?['text'],'')}",
+                                                        "messageRecipients": [],
+                                                        "messageReference": "@body('Parse_payload_JSON')?['response_url']",
+                                                        "messageType": "@variables('responseType')"
+                                                    },
+                                                    "description": "The direct response to a given Slack URL should have an empty recipient list, to avoid duplication of messages"
+                                                },
+                                                "Condition_-_check_for_approval_response": {
+                                                    "actions": {
+                                                        "Compose_updated_messageBody": {
+                                                            "runAfter": {
+                                                                "Condition_-_approval_response_given": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "Compose",
+                                                            "inputs": "@{body('Parse_payload_JSON')?['message']?['text']}\n\n_Status: @{variables('responseResult')}_"
+                                                        },
+                                                        "Condition_-_approval_response_given": {
+                                                            "actions": {
+                                                                "Condition_-_approval_response_rejected": {
+                                                                    "actions": {
+                                                                        "Set_variable_-_responseResult_=_rejected": {
+                                                                            "runAfter": {},
+                                                                            "type": "SetVariable",
+                                                                            "inputs": {
+                                                                                "name": "responseResult",
+                                                                                "value": ":octagonal_sign: Rejected"
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "runAfter": {},
+                                                                    "else": {
+                                                                        "actions": {
+                                                                            "Set_variable_-_responseResult_=_approved": {
+                                                                                "runAfter": {},
+                                                                                "type": "SetVariable",
+                                                                                "inputs": {
+                                                                                    "name": "responseResult",
+                                                                                    "value": ":white_check_mark: Approved"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "expression": {
+                                                                        "and": [
+                                                                            {
+                                                                                "startsWith": [
+                                                                                    "@body('Filter_blocks_for_approval_status')[0]?['value']",
+                                                                                    "reject_"
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                    "type": "If"
+                                                                }
+                                                            },
+                                                            "runAfter": {
+                                                                "Filter_blocks_for_approval_status": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "else": {
+                                                                "actions": {
+                                                                    "Set_variable_-_unknown_responseResult": {
+                                                                        "runAfter": {},
+                                                                        "type": "SetVariable",
+                                                                        "inputs": {
+                                                                            "name": "responseResult",
+                                                                            "value": "Deferred"
+                                                                        },
+                                                                        "description": "This is a catch, so if hit should probably have some other logic around it to deal with the scenario"
+                                                                    }
+                                                                }
+                                                            },
+                                                            "expression": {
+                                                                "and": [
+                                                                    {
+                                                                        "equals": [
+                                                                            "@length(body('Filter_blocks_for_approval_status'))",
+                                                                            1
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            },
+                                                            "type": "If"
+                                                        },
+                                                        "Filter_blocks_for_approval_status": {
+                                                            "runAfter": {
+                                                                "Set_variable_-_responseType": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "Query",
+                                                            "inputs": {
+                                                                "from": "@body('Parse_payload_JSON')?['actions']",
+                                                                "where": "@startsWith(item()?['action_id'], 'actionId-')"
+                                                            }
+                                                        },
+                                                        "Set_variable_-_responseType": {
+                                                            "runAfter": {},
+                                                            "type": "SetVariable",
+                                                            "inputs": {
+                                                                "name": "responseType",
+                                                                "value": "approval"
+                                                            }
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "Filter_blocks_for_message_type": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "else": {
+                                                        "actions": {
+                                                            "Compose_response_to_messageBody": {
+                                                                "runAfter": {},
+                                                                "type": "Compose",
+                                                                "inputs": "@body('Parse_payload_JSON')?['message']?['text']"
+                                                            }
+                                                        }
+                                                    },
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "greater": [
+                                                                    "@length(body('Filter_blocks_for_message_type'))",
+                                                                    0
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "type": "If"
+                                                },
+                                                "Filter_blocks_for_message_header": {
+                                                    "runAfter": {},
+                                                    "type": "Query",
+                                                    "inputs": {
+                                                        "from": "@body('Parse_payload_JSON')?['message']?['blocks']",
+                                                        "where": "@equals(item()?['type'], 'header')"
+                                                    }
+                                                },
+                                                "Filter_blocks_for_message_type": {
+                                                    "runAfter": {
+                                                        "Filter_blocks_for_message_header": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Query",
+                                                    "inputs": {
+                                                        "from": "@body('Parse_payload_JSON')?['message']?['blocks']",
+                                                        "where": "@and(equals(item()?['type'], 'section'),contains(toLower(item()?['text']?['text']), toLower(parameters('slackApprovalSearchText'))))"
+                                                    },
+                                                    "description": "Looks for the section containing the approval text, as defined in the parameter - slackApprovalSearchText"
+                                                },
+                                                "HTTP_-_Slack_via_LA_-_Respond_to_message_": {
+                                                    "runAfter": {
+                                                        "Compose_response_body": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "body": "@outputs('Compose_response_body')",
+                                                        "method": "POST",
+                                                        "uri": "@parameters('slackResponseBrokerUrl')"
+                                                    },
+                                                    "runtimeConfiguration": {
+                                                        "staticResult": {
+                                                            "staticResultOptions": "Disabled",
+                                                            "name": "HTTP_-_Slack_via_LA_-_Respond_to_message_0"
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Parse_payload_JSON": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "not": {
+                                                            "equals": [
+                                                                "@body('Parse_payload_JSON')?['response_url']",
+                                                                "@null"
+                                                            ]
+                                                        }
+                                                    },
+                                                    {
+                                                        "greater": [
+                                                            "@length(body('Parse_payload_JSON')?['response_url'])",
+                                                            0
+                                                        ]
+                                                    },
+                                                    {
+                                                        "startsWith": [
+                                                            "@body('Parse_payload_JSON')?['response_url']",
+                                                            "https:"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "type": "If"
+                                        },
+                                        "Parse_payload_JSON": {
+                                            "runAfter": {
+                                                "Compose_payload_data": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ParseJson",
+                                            "inputs": {
+                                                "content": "@outputs('Compose_payload_data')",
+                                                "schema": {
+                                                    "properties": {
+                                                        "actions": {
+                                                            "items": {
+                                                                "properties": {
+                                                                    "action_id": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "action_ts": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "block_id": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "type": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "value": {
+                                                                        "type": "string"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "action_id",
+                                                                    "block_id",
+                                                                    "value",
+                                                                    "type",
+                                                                    "action_ts"
+                                                                ],
+                                                                "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                        },
+                                                        "api_app_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "channel": {
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "container": {
+                                                            "properties": {
+                                                                "channel_id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "is_ephemeral": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "message_ts": {
+                                                                    "type": "string"
+                                                                },
+                                                                "type": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "enterprise": {},
+                                                        "is_enterprise_install": {
+                                                            "type": "boolean"
+                                                        },
+                                                        "message": {
+                                                            "properties": {
+                                                                "app_id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "blocks": {
+                                                                    "items": {
+                                                                        "properties": {
+                                                                            "block_id": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "element": {
+                                                                                "properties": {
+                                                                                    "action_id": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "type": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                },
+                                                                                "type": [
+                                                                                    "object",
+                                                                                    "null"
+                                                                                ]
+                                                                            },
+                                                                            "elements": {
+                                                                                "items": {
+                                                                                    "properties": {
+                                                                                        "action_id": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "type": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "value": {
+                                                                                            "type": "string"
+                                                                                        }
+                                                                                    },
+                                                                                    "type": "object"
+                                                                                },
+                                                                                "type": [
+                                                                                    "array",
+                                                                                    "null"
+                                                                                ]
+                                                                            },
+                                                                            "type": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "type": "array"
+                                                                },
+                                                                "bot_id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "team": {
+                                                                    "type": "string"
+                                                                },
+                                                                "text": {
+                                                                    "type": "string"
+                                                                },
+                                                                "ts": {
+                                                                    "type": "string"
+                                                                },
+                                                                "type": {
+                                                                    "type": "string"
+                                                                },
+                                                                "user": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "response_url": {
+                                                            "type": "string"
+                                                        },
+                                                        "state": {
+                                                            "properties": {
+                                                                "values": {
+                                                                    "type": [
+                                                                        "object",
+                                                                        "null"
+                                                                    ]
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "team": {
+                                                            "properties": {
+                                                                "domain": {
+                                                                    "type": "string"
+                                                                },
+                                                                "id": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "token": {
+                                                            "type": "string"
+                                                        },
+                                                        "trigger_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "type": {
+                                                            "type": "string"
+                                                        },
+                                                        "user": {
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "team_id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "username": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Filter_for_payload": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "else": {
+                                        "actions": {
+                                            "Terminate": {
+                                                "runAfter": {},
+                                                "type": "Terminate",
+                                                "inputs": {
+                                                    "runStatus": "Cancelled"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "equals": [
+                                                    "@length(body('Filter_for_payload'))",
+                                                    1
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                },
+                                "Filter_for_payload": {
+                                    "runAfter": {
+                                        "Compose_form_data_array": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Query",
+                                    "inputs": {
+                                        "from": "@outputs('Compose_form_data_array')",
+                                        "where": "@equals(item()?['key'], 'payload')"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_variable_-_responseResult": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Scope"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {}
+            }
+        }
+    ]
+}

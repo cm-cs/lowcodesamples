@@ -1,0 +1,48 @@
+{
+    "_metadata": {
+        "major_version": 1,
+        "minor_version": 0
+    },
+    "display_information": {
+        "name": "Automation Bot",
+        "description": "Bot handling automation interactivity with end users / task approvers.",
+        "background_color": "#44449c"
+    },
+    "settings": {
+        "org_deploy_enabled": true,
+        "socket_mode_enabled": false,
+        "interactivity": {
+            "is_enabled": true,
+            "request_url": "https://${apim-url}/slack-interaction"
+        }
+    },
+    "features": {
+        "app_home": {
+            "home_tab_enabled": false,
+            "messages_tab_enabled": true,
+            "messages_tab_read_only_enabled": true
+        },
+        "bot_user": {
+            "display_name": "autobot",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "channels:history",
+                "channels:read",
+                "chat:write",
+                "chat:write.customize",
+                "chat:write.public",
+                "dnd:read",
+                "emoji:read",
+                "groups:read",
+                "team:read",
+                "users.profile:read",
+                "users:read",
+                "users:read.email"
+            ]
+        }
+    }
+}
