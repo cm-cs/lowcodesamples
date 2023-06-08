@@ -27,3 +27,13 @@ Once tested, raise a pull request to merge the changes back into the respective 
 
 - [Visual Studio Code](https://https://code.visualstudio.com/download)
 - [Azure Data Studio](https://learn.microsoft.com/en-gb/sql/azure-data-studio/download-azure-data-studio#download-azure-data-studio)
+
+## Deploy
+
+At your own risk:
+
+[![Deploy Samples To Azure](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fcm-cs%2Flowcodesamples%2Fmain%2Fsrc%2F_examples%2Farm-templates%2FazureDeploy.json)
+
+- Deploy to Azure
+- Grant -notify MI required KeyVault secrets user role
+- Create the two required secrets
