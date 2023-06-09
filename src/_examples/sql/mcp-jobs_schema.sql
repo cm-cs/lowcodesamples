@@ -30,6 +30,7 @@ INSERT INTO [dbo].[tbl-mcp-jobs] (requestReference, requestType, requestUser, ob
  ('test3', 'aaduser_test', NULL, 'aadguest', 'joe@external','none','none',0,NULL);
 
 --CREATE USER "mi-example" FROM EXTERNAL PROVIDER;
+--ALTER ROLE db_datareader ADD MEMBER "mi-example";
 --ALTER ROLE db_datawriter ADD MEMBER "mi-example";
 
 UPDATE [dbo].[tbl-mcp-jobs] SET [status] = 5 WHERE [requestType] = 'aaduser_guestinvite';

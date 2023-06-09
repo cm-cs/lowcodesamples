@@ -6,7 +6,7 @@
             "type": "string"
         },
         "KeyvaultName": {
-            "defaultValue": "[concat('kv',parameters('BaseName'),'-uks')]",
+            "defaultValue": "[concat('kv-',parameters('BaseName'),'-uks')]",
             "type": "String"
         },
         "KeyVaultConnectionName": {
